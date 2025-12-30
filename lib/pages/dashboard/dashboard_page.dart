@@ -5,6 +5,7 @@ import '../../components/dashboard_header.dart';
 import '../../components/stat_card.dart';
 import '../../components/purchase_card.dart';
 import '../../components/scan_button.dart';
+import '../notas/buscar_notas_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -49,6 +50,14 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() {
       _selectedIndex = index;
     });
+
+    // Navega para a tela de buscar notas
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const BuscarNotasPage()),
+      );
+    }
   }
 
   Future<void> _scanPurchase() async {
