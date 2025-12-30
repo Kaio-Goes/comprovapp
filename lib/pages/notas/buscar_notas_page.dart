@@ -1,51 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../../services/nota_fiscal_service.dart';
+import '../../services/auth_service.dart';
 import '../../models/nota_fiscal_model.dart';
+import '../../models/usuario_model.dart';
 import 'package:intl/intl.dart';
 
-class BuscarNotasPage extends StatefulWidget {
-  const BuscarNotasPage({super.key});
+class MinhasNotasPage extends StatefulWidget {
+  const MinhasNotasPage({super.key});
 
   @override
-  State<BuscarNotasPage> createState() => _BuscarNotasPageState();
+  State<MinhasNotasPage> createState() => _MinhasNotasPageState();
 }
 
-class _BuscarNotasPageState extends State<BuscarNotasPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _cpfController = TextEditingController();
+class _MinhasNotasPageState extends State<MinhasNotasPage> {
   final _notaFiscalService = NotaFiscalService();
-
-  final _cpfMask = MaskTextInputFormatter(
-    mask: '###.###.###-##',
-    filter: {"#": RegExp(r'[0-9]')},
-  );
+  final _authService = AuthService();
 
   bool _isLoading = false;
   List<NotaFiscal>? _notas;
   String? _errorMessage;
+  Usuario? _usuario;
 
   @override
-  void dispose() {
-    _cpfController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _carregarDados();
+  }
+
+  Future<void> _carregarDados() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final usuario = await _authService.getCurrentUser();
+      if (usuario == null) {
+        setState(() {
+          _errorMessage = 'Usuário não autenticado';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _usuario = usuario;
+      });
+
+      await _buscarNotas();
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erro ao carregar dados: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _buscarNotas() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (_usuario == null) return;
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _notas = null;
     });
 
     try {
-      final notas = await _notaFiscalService.buscarNotasPorCPF(
-        _cpfController.text,
-      );
+      final notas = await _notaFiscalService.buscarNotasDoUsuario(_usuario!);
 
       setState(() {
         _notas = notas;
@@ -54,7 +74,7 @@ class _BuscarNotasPageState extends State<BuscarNotasPage> {
 
       if (notas.isEmpty) {
         setState(() {
-          _errorMessage = 'Nenhuma nota fiscal encontrada para este CPF.';
+          _errorMessage = 'Nenhuma nota fiscal encontrada.';
         });
       }
     } catch (e) {
@@ -69,108 +89,112 @@ class _BuscarNotasPageState extends State<BuscarNotasPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Buscar Notas Fiscais'),
+        title: const Text('Minhas Notas Fiscais'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _buscarNotas,
+            tooltip: 'Atualizar',
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              elevation: 2,
-              child: Padding(
+      body: _isLoading && _notas == null
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _buscarNotas,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Digite o CPF para buscar as notas fiscais',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _cpfController,
-                        inputFormatters: [_cpfMask],
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'CPF',
-                          hintText: '000.000.000-00',
-                          prefixIcon: Icon(Icons.person),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Digite o CPF';
-                          }
-                          if (!_notaFiscalService.validarCPF(value)) {
-                            return 'CPF inválido';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _buscarNotas,
-                        icon: _isLoading
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.search),
-                        label: Text(_isLoading ? 'Buscando...' : 'Buscar Notas'),
-                        style: ElevatedButton.styleFrom(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_usuario != null)
+                      Card(
+                        elevation: 2,
+                        child: Padding(
                           padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 30,
+                                    backgroundColor: Colors.deepPurple.shade100,
+                                    child: Text(
+                                      _usuario!.primeiroNome[0].toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.deepPurple.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _usuario!.nome,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'CPF: ${_usuario!.cpfFormatado}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                    const SizedBox(height: 16),
+                    if (_errorMessage != null)
+                      Card(
+                        color: Colors.red.shade50,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.error_outline, color: Colors.red.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: TextStyle(color: Colors.red.shade700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (_notas != null && _notas!.isNotEmpty) ...[
+                      Text(
+                        'Notas Encontradas: ${_notas!.length}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._notas!.map((nota) => _buildNotaCard(nota)),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            if (_errorMessage != null)
-              Card(
-                color: Colors.red.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline, color: Colors.red.shade700),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: TextStyle(color: Colors.red.shade700),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (_notas != null && _notas!.isNotEmpty) ...[
-              Text(
-                'Notas Encontradas: ${_notas!.length}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ..._notas!.map((nota) => _buildNotaCard(nota)),
-            ],
-          ],
-        ),
-      ),
     );
   }
 

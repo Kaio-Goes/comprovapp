@@ -1,4 +1,5 @@
 import '../models/nota_fiscal_model.dart';
+import '../models/usuario_model.dart';
 
 class NotaFiscalService {
   // URLs das APIs da SEFAZ (variam por estado)
@@ -6,39 +7,43 @@ class NotaFiscalService {
   static const String baseUrl = 'https://www.nfe.fazenda.gov.br';
 
   // Para produção, você precisará:
-  // 1. Certificado digital A1 ou A3
-  // 2. Credenciais de acesso à SEFAZ
+  // 1. Certificado digital A1 ou A3 (já autenticado via Gov.br)
+  // 2. Token de acesso do usuário logado
   // 3. Configurar o ambiente específico do estado
 
-  /// Busca notas fiscais pelo CPF do destinatário
+  /// Busca notas fiscais do usuário logado
+  ///
+  /// Usa o CPF e token do usuário autenticado via Gov.br
+  /// para buscar suas notas fiscais na SEFAZ
   ///
   /// IMPORTANTE: Esta implementação usa dados simulados.
   /// Para integração real com SEFAZ, você precisará:
-  /// - Certificado digital
-  /// - Credenciais de acesso
-  /// - Implementar autenticação via certificado
+  /// - Usar o token OAuth2 do Gov.br
+  /// - Fazer requisição autenticada à API da SEFAZ
   /// - Usar o webservice correto do estado (SVRS, SVAN, etc)
-  Future<List<NotaFiscal>> buscarNotasPorCPF(String cpf, {
+  Future<List<NotaFiscal>> buscarNotasDoUsuario(
+    Usuario usuario, {
     DateTime? dataInicio,
     DateTime? dataFim,
   }) async {
     try {
       // Remove formatação do CPF
-      final cpfLimpo = cpf.replaceAll(RegExp(r'[^\d]'), '');
+      final cpfLimpo = usuario.cpf.replaceAll(RegExp(r'[^\d]'), '');
 
       if (cpfLimpo.length != 11) {
         throw Exception('CPF inválido');
       }
 
       // SIMULAÇÃO: Em produção, faça a chamada real à API da SEFAZ
-      // Exemplo de endpoint (varia por estado):
+      // usando o token de autenticação do usuário
+      //
       // final url = Uri.parse('$baseUrl/nfce/consultarNFCePorDestinatario');
       //
       // final response = await http.post(
       //   url,
       //   headers: {
       //     'Content-Type': 'application/xml',
-      //     // Certificado digital aqui
+      //     'Authorization': 'Bearer ${usuario.accessToken}',
       //   },
       //   body: _montarXMLConsulta(cpfLimpo, dataInicio, dataFim),
       // );
@@ -57,7 +62,11 @@ class NotaFiscalService {
   }
 
   /// Consulta uma nota fiscal específica pela chave de acesso
-  Future<NotaFiscal?> consultarNotaPorChave(String chaveAcesso) async {
+  /// Usa o token do usuário logado para autenticação
+  Future<NotaFiscal?> consultarNotaPorChave(
+    String chaveAcesso,
+    Usuario usuario,
+  ) async {
     try {
       // Remove espaços e formatação
       final chave = chaveAcesso.replaceAll(RegExp(r'\s'), '');
@@ -67,10 +76,12 @@ class NotaFiscalService {
       }
 
       // SIMULAÇÃO: chamada real ao webservice
+      // Em produção, use o token do usuário:
+      // headers: {'Authorization': 'Bearer ${usuario.accessToken}'}
       await Future.delayed(const Duration(seconds: 1));
 
       // Retorna uma nota simulada
-      return _gerarNotasSimuladas('12345678901').first;
+      return _gerarNotasSimuladas(usuario.cpf).first;
     } catch (e) {
       throw Exception('Erro ao consultar nota fiscal: $e');
     }

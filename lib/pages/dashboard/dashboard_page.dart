@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../models/purchase_model.dart';
 import '../../services/purchase_service.dart';
+import '../../services/auth_service.dart';
 import '../../components/dashboard_header.dart';
 import '../../components/stat_card.dart';
 import '../../components/purchase_card.dart';
 import '../../components/scan_button.dart';
 import '../notas/buscar_notas_page.dart';
+import '../auth/login_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -16,6 +18,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final PurchaseService _purchaseService = PurchaseService();
+  final AuthService _authService = AuthService();
 
   int _selectedIndex = 0;
   List<Purchase> _recentPurchases = [];
@@ -51,11 +54,91 @@ class _DashboardPageState extends State<DashboardPage> {
       _selectedIndex = index;
     });
 
-    // Navega para a tela de buscar notas
+    // Navega para a tela de notas fiscais
     if (index == 1) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const BuscarNotasPage()),
+        MaterialPageRoute(builder: (context) => const MinhasNotasPage()),
+      );
+    }
+
+    // Navega para perfil/configurações
+    if (index == 3) {
+      _showProfileMenu();
+    }
+  }
+
+  void _showProfileMenu() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Meu Perfil'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Perfil em desenvolvimento')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Configurações'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Configurações em desenvolvimento')),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Sair', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                await _logout();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sair'),
+        content: const Text('Deseja realmente sair da sua conta?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sair', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _authService.logout();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (route) => false,
       );
     }
   }
