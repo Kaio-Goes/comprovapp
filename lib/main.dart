@@ -3,6 +3,7 @@ import 'package:comprovapp/pages/auth/welcome_page.dart';
 import 'package:comprovapp/pages/dashboard/dashboard_page.dart';
 import 'package:comprovapp/services/auth_service.dart';
 import 'package:flutter/material.dart';
+import 'config/app_colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'ComprovApp',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFEF7C7C)),
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
         useMaterial3: true,
       ),
       home: const AuthWrapper(),

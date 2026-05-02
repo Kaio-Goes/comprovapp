@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/app_colors.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../../services/auth_service.dart';
 import '../dashboard/dashboard_page.dart';
@@ -72,8 +73,8 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Fundo coral
-          Container(color: const Color(0xFFEF7C7C)),
+          // Fundo azul Gov.br
+          Container(color: AppColors.primary),
 
           // Padrão decorativo
           Positioned.fill(child: CustomPaint(painter: _DecorativePainter())),
@@ -114,7 +115,7 @@ class _LoginPageState extends State<LoginPage> {
                     height: 3,
                     margin: const EdgeInsets.only(top: 6, bottom: 32),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEF7C7C),
+                      color: AppColors.primary,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -193,7 +194,7 @@ class _LoginPageState extends State<LoginPage> {
                               height: 20,
                               child: Checkbox(
                                 value: _lembrarMe,
-                                activeColor: const Color(0xFFEF7C7C),
+                                activeColor: AppColors.primary,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(4),
                                 ),
@@ -220,7 +221,7 @@ class _LoginPageState extends State<LoginPage> {
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEF7C7C),
+                              backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
@@ -263,7 +264,7 @@ class _LoginPageState extends State<LoginPage> {
                                     child: const Text(
                                       'Criar senha',
                                       style: TextStyle(
-                                        color: Color(0xFFEF7C7C),
+                                        color: AppColors.primary,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -315,7 +316,7 @@ class _LoginPageState extends State<LoginPage> {
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(color: Color(0xFFEF7C7C), width: 2),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
         errorBorder: const UnderlineInputBorder(
           borderSide: BorderSide(color: Colors.red),

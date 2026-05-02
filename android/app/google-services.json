@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "944290577116",
+    "project_id": "comprovaapp",
+    "storage_bucket": "comprovaapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:944290577116:android:81cd0f20736200fc6a9219",
+        "android_client_info": {
+          "package_name": "com.example.comprovapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAyC4ARKwqzdxh1YXNWBv_6Ba5JEXitlm0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

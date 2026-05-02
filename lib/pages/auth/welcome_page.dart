@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/app_colors.dart';
 import 'login_page.dart';
 
 class WelcomePage extends StatelessWidget {
@@ -9,8 +10,8 @@ class WelcomePage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          // Fundo coral
-          Container(color: const Color(0xFFEF7C7C)),
+          // Fundo azul Gov.br
+          Container(color: AppColors.primary),
 
           // Onda branca na parte inferior
           Align(
@@ -104,7 +105,7 @@ class WelcomePage extends StatelessWidget {
                             width: 48,
                             height: 48,
                             decoration: const BoxDecoration(
-                              color: Color(0xFFEF7C7C),
+                              color: AppColors.primary,
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
