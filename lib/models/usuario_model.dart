@@ -1,68 +1,44 @@
 class Usuario {
+  final String uid;
   final String cpf;
-  final String nome;
-  final String? email;
-  final String? telefone;
-  final DateTime? dataNascimento;
-  final String? foto;
-  final String accessToken;
-  final String? refreshToken;
-  final DateTime tokenExpiry;
+  final String nomeCompleto;
+  final String email;
+  final DateTime dataNascimento;
 
   Usuario({
+    required this.uid,
     required this.cpf,
-    required this.nome,
-    this.email,
-    this.telefone,
-    this.dataNascimento,
-    this.foto,
-    required this.accessToken,
-    this.refreshToken,
-    required this.tokenExpiry,
+    required this.nomeCompleto,
+    required this.email,
+    required this.dataNascimento,
   });
 
-  factory Usuario.fromJson(Map<String, dynamic> json) {
+  factory Usuario.fromFirestore(Map<String, dynamic> data, String uid) {
     return Usuario(
-      cpf: json['cpf'] ?? '',
-      nome: json['nome'] ?? json['name'] ?? '',
-      email: json['email'],
-      telefone: json['telefone'] ?? json['phone_number'],
-      dataNascimento: json['dataNascimento'] != null
-          ? DateTime.parse(json['dataNascimento'])
-          : null,
-      foto: json['foto'] ?? json['picture'],
-      accessToken: json['accessToken'] ?? '',
-      refreshToken: json['refreshToken'],
-      tokenExpiry: json['tokenExpiry'] != null
-          ? DateTime.parse(json['tokenExpiry'])
-          : DateTime.now().add(const Duration(hours: 1)),
+      uid: uid,
+      cpf: data['cpf'] ?? '',
+      nomeCompleto: data['nomeCompleto'] ?? '',
+      email: data['email'] ?? '',
+      dataNascimento: data['dataNascimento'] != null
+          ? DateTime.parse(data['dataNascimento'])
+          : DateTime(2000),
     );
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toFirestore() {
     return {
       'cpf': cpf,
-      'nome': nome,
+      'nomeCompleto': nomeCompleto,
       'email': email,
-      'telefone': telefone,
-      'dataNascimento': dataNascimento?.toIso8601String(),
-      'foto': foto,
-      'accessToken': accessToken,
-      'refreshToken': refreshToken,
-      'tokenExpiry': tokenExpiry.toIso8601String(),
+      'dataNascimento': dataNascimento.toIso8601String(),
     };
   }
 
   String get cpfFormatado {
-    if (cpf.length != 11) return cpf;
-    return '${cpf.substring(0, 3)}.${cpf.substring(3, 6)}.${cpf.substring(6, 9)}-${cpf.substring(9, 11)}';
+    final c = cpf.replaceAll(RegExp(r'[^\d]'), '');
+    if (c.length != 11) return cpf;
+    return '${c.substring(0, 3)}.${c.substring(3, 6)}.${c.substring(6, 9)}-${c.substring(9, 11)}';
   }
 
-  String get primeiroNome {
-    return nome.split(' ').first;
-  }
-
-  bool get tokenValido {
-    return DateTime.now().isBefore(tokenExpiry);
-  }
+  String get primeiroNome => nomeCompleto.split(' ').first;
 }

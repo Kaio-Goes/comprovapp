@@ -37,7 +37,7 @@ class _MinhasNotasPageState extends State<MinhasNotasPage> {
     });
 
     try {
-      final usuario = await _authService.getCurrentUser();
+      final usuario = await _authService.perfilAtual();
       if (usuario == null) {
         setState(() {
           _errorMessage = 'Usuário não autenticado';
@@ -140,7 +140,7 @@ class _MinhasNotasPageState extends State<MinhasNotasPage> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          _usuario!.nome,
+                                          _usuario!.nomeCompleto,
                                           style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,

@@ -1,8 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../config/app_colors.dart';
-import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../../services/auth_service.dart';
 import '../dashboard/dashboard_page.dart';
+import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,51 +15,76 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
-  final _cpfController = TextEditingController();
+  final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
-  final _cpfFormatter = MaskTextInputFormatter(
-    mask: '###.###.###-##',
-    filter: {'#': RegExp(r'[0-9]')},
-  );
 
   bool _isLoading = false;
   bool _obscureSenha = true;
-  bool _lembrarMe = false;
 
   @override
   void dispose() {
-    _cpfController.dispose();
+    _emailController.dispose();
     _senhaController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-
     try {
-      final cpf = _cpfFormatter.getUnmaskedText();
-      final usuario = await _authService.login(
-        cpf: cpf,
+      await _authService.login(
+        email: _emailController.text,
         senha: _senhaController.text,
-        lembrarMe: _lembrarMe,
       );
-
       if (!mounted) return;
-
-      if (usuario != null) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const DashboardPage()),
-        );
-      } else {
-        _showError('CPF ou senha inválidos. Verifique e tente novamente.');
-      }
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const DashboardPage()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      _showError(_mensagemErro(e.code));
     } catch (e) {
       if (!mounted) return;
-      _showError('Erro ao fazer login: ${e.toString()}');
+      _showError('Erro ao fazer login. Tente novamente.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleRecuperarSenha() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      _showError('Informe seu e-mail para recuperar a senha.');
+      return;
+    }
+    try {
+      await _authService.recuperarSenha(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('E-mail de recuperação enviado!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showError('Não foi possível enviar o e-mail. Verifique o endereço.');
+    }
+  }
+
+  String _mensagemErro(String code) {
+    switch (code) {
+      case 'user-not-found':
+        return 'Nenhuma conta encontrada com este e-mail.';
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'E-mail ou senha incorretos.';
+      case 'too-many-requests':
+        return 'Muitas tentativas. Aguarde e tente novamente.';
+      case 'user-disabled':
+        return 'Esta conta foi desativada.';
+      default:
+        return 'Erro ao fazer login. Tente novamente.';
     }
   }
 
@@ -73,7 +99,7 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Fundo azul Gov.br
+          // Fundo azul
           Container(color: AppColors.primary),
 
           // Padrão decorativo
@@ -99,17 +125,14 @@ class _LoginPageState extends State<LoginPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 80),
-
-                  // Título
                   const Text(
                     'Entrar',
                     style: TextStyle(
                       fontSize: 34,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF2D2D2D),
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                  // Linha decorativa
                   Container(
                     width: 40,
                     height: 3,
@@ -119,51 +142,49 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-
                   Form(
                     key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Campo CPF
+                        // E-mail
                         const Text(
-                          'CPF',
+                          'E-mail',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF2D2D2D),
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 8),
                         _buildTextField(
-                          controller: _cpfController,
-                          hint: '000.000.000-00',
-                          prefixIcon: Icons.badge_outlined,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [_cpfFormatter],
+                          controller: _emailController,
+                          hint: 'seu@email.com',
+                          prefixIcon: Icons.email_outlined,
+                          keyboardType: TextInputType.emailAddress,
                           validator: (v) {
-                            final digits = _cpfFormatter.getUnmaskedText();
-                            if (digits.length != 11) {
-                              return 'Informe um CPF válido';
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Informe seu e-mail';
                             }
+                            if (!v.contains('@')) return 'E-mail inválido';
                             return null;
                           },
                         ),
                         const SizedBox(height: 20),
 
-                        // Campo Senha
+                        // Senha
                         const Text(
                           'Senha',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF2D2D2D),
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 8),
                         _buildTextField(
                           controller: _senhaController,
-                          hint: 'digite sua senha',
+                          hint: 'sua senha',
                           prefixIcon: Icons.lock_outline,
                           obscureText: _obscureSenha,
                           suffixIcon: IconButton(
@@ -184,33 +205,22 @@ class _LoginPageState extends State<LoginPage> {
                             return null;
                           },
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
 
-                        // Lembrar-me
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: Checkbox(
-                                value: _lembrarMe,
-                                activeColor: AppColors.primary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                onChanged: (v) =>
-                                    setState(() => _lembrarMe = v ?? false),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Lembrar-me',
+                        // Esqueci a senha
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: GestureDetector(
+                            onTap: _handleRecuperarSenha,
+                            child: const Text(
+                              'Esqueci minha senha',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Color(0xFF2D2D2D),
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
+                          ),
                         ),
                         const SizedBox(height: 32),
 
@@ -250,29 +260,34 @@ class _LoginPageState extends State<LoginPage> {
 
                         // Cadastro
                         Center(
-                          child: RichText(
-                            text: TextSpan(
-                              text: 'Primeiro acesso? ',
-                              style: const TextStyle(
-                                color: Color(0xFF888888),
-                                fontSize: 13,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Não tem conta? ',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 13,
+                                ),
                               ),
-                              children: [
-                                WidgetSpan(
-                                  child: GestureDetector(
-                                    onTap: () => _showCadastroInfo(),
-                                    child: const Text(
-                                      'Criar senha',
-                                      style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const RegisterPage(),
                                     ),
+                                  );
+                                },
+                                child: const Text(
+                                  'Criar conta',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 32),
@@ -295,18 +310,14 @@ class _LoginPageState extends State<LoginPage> {
     bool obscureText = false,
     Widget? suffixIcon,
     TextInputType? keyboardType,
-    List<dynamic>? inputFormatters,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
-      inputFormatters: inputFormatters != null
-          ? inputFormatters.cast()
-          : null,
       validator: validator,
-      style: const TextStyle(fontSize: 14, color: Color(0xFF2D2D2D)),
+      style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
@@ -316,7 +327,7 @@ class _LoginPageState extends State<LoginPage> {
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: const UnderlineInputBorder(
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: AppColors.primary, width: 2),
         ),
         errorBorder: const UnderlineInputBorder(
           borderSide: BorderSide(color: Colors.red),
@@ -324,26 +335,7 @@ class _LoginPageState extends State<LoginPage> {
         focusedErrorBorder: const UnderlineInputBorder(
           borderSide: BorderSide(color: Colors.red, width: 2),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-      ),
-    );
-  }
-
-  void _showCadastroInfo() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Criar Senha'),
-        content: const Text(
-          'Para criar sua senha, entre em contato com o administrador do sistema ou acesse as configurações do app.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
+        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
       ),
     );
   }
@@ -401,3 +393,4 @@ class _DecorativePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
+
