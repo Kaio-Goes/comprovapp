@@ -92,4 +92,3 @@ class AuthService {
     return _auth.currentUser != null;
   }
 }
-
