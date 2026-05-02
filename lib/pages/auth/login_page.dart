@@ -111,7 +111,7 @@ class _LoginPageState extends State<LoginPage> {
             child: ClipPath(
               clipper: _WaveClipper(),
               child: Container(
-                height: MediaQuery.of(context).size.height * 0.78,
+                height: MediaQuery.of(context).size.height * 0.7,
                 color: Colors.white,
               ),
             ),
@@ -124,7 +124,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 80),
+                  const SizedBox(height: 290),
                   const Text(
                     'Entrar',
                     style: TextStyle(

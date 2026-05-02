@@ -189,7 +189,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 45),
                         const Text(
                           'Criar conta',
                           style: TextStyle(
