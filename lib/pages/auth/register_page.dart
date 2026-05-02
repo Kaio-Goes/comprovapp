@@ -90,18 +90,18 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  void _abrirDatePicker() {
-    showCupertinoModalPopup(
+  Future<void> _abrirDatePicker() async {
+    await showCupertinoModalPopup(
       context: context,
       builder: (_) => Container(
         height: 300,
         color: Colors.white,
         child: Column(
           children: [
-            // Header
             Container(
               color: const Color(0xFFF7F7F7),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -479,8 +479,9 @@ class _RegisterPageState extends State<RegisterPage> {
       keyboardType: keyboardType,
       textCapitalization: textCapitalization,
       inputFormatters:
-          inputFormatters != null ? inputFormatters.cast() : null,
+          inputFormatters?.cast(),
       validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
       decoration: InputDecoration(
         hintText: hint,

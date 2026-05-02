@@ -117,6 +117,24 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
 
+          // Logo na área verde
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 40),
+                  child: Image.asset(
+                    'assets/images/comprova_logo.png',
+                    height: 150,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           // Conteúdo scrollável
           SafeArea(
             child: SingleChildScrollView(
@@ -317,6 +335,7 @@ class _LoginPageState extends State<LoginPage> {
       obscureText: obscureText,
       keyboardType: keyboardType,
       validator: validator,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
       decoration: InputDecoration(
         hintText: hint,
