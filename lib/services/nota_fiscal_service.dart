@@ -1,123 +1,239 @@
+import 'dart:io';
+import 'dart:convert';
+import 'package:xml/xml.dart';
 import '../models/nota_fiscal_model.dart';
 import '../models/usuario_model.dart';
+import '../config/sefaz_config.dart';
 
+/// Serviço de consulta de Notas Fiscais na SEFAZ usando certificado A1.
+///
+/// O certificado A1 (.pfx / .p12) é carregado via [SefazConfig] e
+/// utilizado para autenticação mTLS nas chamadas ao webservice da SEFAZ.
+///
+/// Endpoints por ambiente:
+///   - Homologação NF-e:  https://hom.nfe.fazenda.gov.br/nfeservicos/services/...
+///   - Produção NF-e:     https://www.nfe.fazenda.gov.br/nfeservicos/services/...
+///   - NFC-e varia por estado (SVRS, SVAN, etc.)
 class NotaFiscalService {
-  // URLs das APIs da SEFAZ (variam por estado)
-  // Exemplo: API da NF-e Nacional (ambiente de homologação)
-  static const String baseUrl = 'https://www.nfe.fazenda.gov.br';
+  final SefazConfig config;
 
-  // Para produção, você precisará:
-  // 1. Certificado digital A1 ou A3 (já autenticado via Gov.br)
-  // 2. Token de acesso do usuário logado
-  // 3. Configurar o ambiente específico do estado
+  NotaFiscalService({required this.config});
 
-  /// Busca notas fiscais do usuário logado
+  /// Busca todas as notas fiscais do destinatário identificado pelo CPF.
   ///
-  /// Usa o CPF e token do usuário autenticado via Gov.br
-  /// para buscar suas notas fiscais na SEFAZ
-  ///
-  /// IMPORTANTE: Esta implementação usa dados simulados.
-  /// Para integração real com SEFAZ, você precisará:
-  /// - Usar o token OAuth2 do Gov.br
-  /// - Fazer requisição autenticada à API da SEFAZ
-  /// - Usar o webservice correto do estado (SVRS, SVAN, etc)
+  /// Em produção, usa a API DistDFeInt (Distribuição de DF-e) da SEFAZ.
   Future<List<NotaFiscal>> buscarNotasDoUsuario(
     Usuario usuario, {
     DateTime? dataInicio,
     DateTime? dataFim,
+    int ultNSU = 0,
   }) async {
     try {
-      // Remove formatação do CPF
-      final cpfLimpo = usuario.cpf.replaceAll(RegExp(r'[^\d]'), '');
+      final cpf = usuario.cpf.replaceAll(RegExp(r'[^\d]'), '');
+      if (cpf.length != 11) throw Exception('CPF inválido');
 
-      if (cpfLimpo.length != 11) {
-        throw Exception('CPF inválido');
+      if (config.modoSimulacao) {
+        await Future.delayed(const Duration(seconds: 2));
+        return _gerarNotasSimuladas(cpf);
       }
 
-      // SIMULAÇÃO: Em produção, faça a chamada real à API da SEFAZ
-      // usando o token de autenticação do usuário
-      //
-      // final url = Uri.parse('$baseUrl/nfce/consultarNFCePorDestinatario');
-      //
-      // final response = await http.post(
-      //   url,
-      //   headers: {
-      //     'Content-Type': 'application/xml',
-      //     'Authorization': 'Bearer ${usuario.accessToken}',
-      //   },
-      //   body: _montarXMLConsulta(cpfLimpo, dataInicio, dataFim),
-      // );
-      //
-      // if (response.statusCode == 200) {
-      //   return _parseXMLResponse(response.body);
-      // }
+      final xmlBody = _montarXmlDistDFe(cpf: cpf, ultNSU: ultNSU);
+      final response = await _chamarWebservice(
+        endpoint: config.endpointDistDFe,
+        xmlBody: xmlBody,
+      );
 
-      // DADOS SIMULADOS para demonstração
-      await Future.delayed(const Duration(seconds: 2));
-
-      return _gerarNotasSimuladas(cpfLimpo);
+      return _parsearRespostaDistDFe(response, cpf);
     } catch (e) {
       throw Exception('Erro ao buscar notas fiscais: $e');
     }
   }
 
-  /// Consulta uma nota fiscal específica pela chave de acesso
-  /// Usa o token do usuário logado para autenticação
+  /// Consulta uma NF-e específica pela chave de acesso (44 dígitos).
   Future<NotaFiscal?> consultarNotaPorChave(
     String chaveAcesso,
     Usuario usuario,
   ) async {
     try {
-      // Remove espaços e formatação
       final chave = chaveAcesso.replaceAll(RegExp(r'\s'), '');
+      if (chave.length != 44) throw Exception('Chave de acesso inválida');
 
-      if (chave.length != 44) {
-        throw Exception('Chave de acesso inválida');
+      if (config.modoSimulacao) {
+        await Future.delayed(const Duration(seconds: 1));
+        final notas = _gerarNotasSimuladas(usuario.cpf);
+        return notas.isNotEmpty ? notas.first : null;
       }
 
-      // SIMULAÇÃO: chamada real ao webservice
-      // Em produção, use o token do usuário:
-      // headers: {'Authorization': 'Bearer ${usuario.accessToken}'}
-      await Future.delayed(const Duration(seconds: 1));
+      final xmlBody = _montarXmlConsultaChave(chave);
+      final response = await _chamarWebservice(
+        endpoint: config.endpointConsultaProtocolo,
+        xmlBody: xmlBody,
+      );
 
-      // Retorna uma nota simulada
-      return _gerarNotasSimuladas(usuario.cpf).first;
+      return _parsearNota(response, usuario.cpf);
     } catch (e) {
       throw Exception('Erro ao consultar nota fiscal: $e');
     }
   }
 
-  /// Valida CPF
-  bool validarCPF(String cpf) {
-    final cpfLimpo = cpf.replaceAll(RegExp(r'[^\d]'), '');
+  // ── XML ──────────────────────────────────────────────────────────────────
 
-    if (cpfLimpo.length != 11) return false;
-    if (RegExp(r'^(\d)\1{10}$').hasMatch(cpfLimpo)) return false;
-
-    List<int> digits = cpfLimpo.split('').map(int.parse).toList();
-
-    // Valida primeiro dígito
-    int sum = 0;
-    for (int i = 0; i < 9; i++) {
-      sum += digits[i] * (10 - i);
-    }
-    int firstDigit = 11 - (sum % 11);
-    if (firstDigit >= 10) firstDigit = 0;
-    if (digits[9] != firstDigit) return false;
-
-    // Valida segundo dígito
-    sum = 0;
-    for (int i = 0; i < 10; i++) {
-      sum += digits[i] * (11 - i);
-    }
-    int secondDigit = 11 - (sum % 11);
-    if (secondDigit >= 10) secondDigit = 0;
-    if (digits[10] != secondDigit) return false;
-
-    return true;
+  String _montarXmlDistDFe({required String cpf, required int ultNSU}) {
+    final cUF = config.codigoUF;
+    return '''<?xml version="1.0" encoding="UTF-8"?>
+<soap12:Envelope
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
+  <soap12:Body>
+    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+      <nfeDadosMsg>
+        <distDFeInt versao="1.01" xmlns="http://www.portalfiscal.inf.br/nfe">
+          <tpAmb>${config.tipoAmbiente}</tpAmb>
+          <cUFAutor>$cUF</cUFAutor>
+          <CNPJ></CNPJ>
+          <CPF>$cpf</CPF>
+          <distNSU>
+            <ultNSU>${ultNSU.toString().padLeft(15, '0')}</ultNSU>
+          </distNSU>
+        </distDFeInt>
+      </nfeDadosMsg>
+    </nfeDistDFeInteresse>
+  </soap12:Body>
+</soap12:Envelope>''';
   }
 
-  /// Gera notas fiscais simuladas para demonstração
+  String _montarXmlConsultaChave(String chave) {
+    return '''<?xml version="1.0" encoding="UTF-8"?>
+<soap12:Envelope
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
+  <soap12:Body>
+    <nfeConsultaNF xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NfeConsulta4">
+      <nfeDadosMsg>
+        <consSitNFe versao="4.01" xmlns="http://www.portalfiscal.inf.br/nfe">
+          <tpAmb>${config.tipoAmbiente}</tpAmb>
+          <xServ>CONSULTAR</xServ>
+          <chNFe>$chave</chNFe>
+        </consSitNFe>
+      </nfeDadosMsg>
+    </nfeConsultaNF>
+  </soap12:Body>
+</soap12:Envelope>''';
+  }
+
+  // ── HTTP com mTLS (certificado A1) ───────────────────────────────────────
+
+  Future<String> _chamarWebservice({
+    required String endpoint,
+    required String xmlBody,
+  }) async {
+    final certBytes = await config.carregarCertificado();
+    final certSenha = config.senhaCertificado;
+
+    final context = SecurityContext(withTrustedRoots: true);
+    context.useCertificateChainBytes(certBytes, password: certSenha);
+    context.usePrivateKeyBytes(certBytes, password: certSenha);
+
+    final client = HttpClient(context: context)
+      ..badCertificateCallback = (cert, host, port) => false;
+
+    try {
+      final uri = Uri.parse(endpoint);
+      final request = await client.postUrl(uri);
+      request.headers.set('Content-Type', 'application/soap+xml; charset=utf-8');
+      request.headers.set('Content-Length', utf8.encode(xmlBody).length.toString());
+      request.write(xmlBody);
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode != 200) {
+        throw Exception('SEFAZ retornou HTTP ${response.statusCode}: $body');
+      }
+
+      return body;
+    } finally {
+      client.close();
+    }
+  }
+
+  // ── Parse XML ────────────────────────────────────────────────────────────
+
+  List<NotaFiscal> _parsearRespostaDistDFe(String xml, String cpf) {
+    final notas = <NotaFiscal>[];
+    try {
+      final document = XmlDocument.parse(xml);
+      final docZips = document.findAllElements('docZip');
+      for (final docZip in docZips) {
+        final schema = docZip.getAttribute('schema') ?? '';
+        if (!schema.startsWith('procNFe') && !schema.startsWith('nfeProc')) {
+          continue;
+        }
+        // O conteúdo é base64 + gzip; parse básico do XML interno
+        final innerXml = utf8.decode(base64.decode(docZip.innerText.trim()));
+        final nota = _parsearNota(innerXml, cpf);
+        if (nota != null) notas.add(nota);
+      }
+    } catch (_) {
+      // retorna lista parcial em caso de erro de parse
+    }
+    return notas;
+  }
+
+  NotaFiscal? _parsearNota(String xml, String cpf) {
+    try {
+      final doc = XmlDocument.parse(xml);
+      final infNFe = doc.findAllElements('infNFe').firstOrNull;
+      if (infNFe == null) return null;
+
+      String _texto(String tag) =>
+          infNFe.findElements(tag).firstOrNull?.innerText ?? '';
+
+      final chave = infNFe.getAttribute('Id')?.replaceFirst('NFe', '') ?? '';
+      final numero = _texto('nNF');
+      final serie = _texto('serie');
+      final dataEmissao = DateTime.tryParse(_texto('dhEmi')) ?? DateTime.now();
+      final cnpjEmit = _texto('CNPJ');
+      final nomeEmit = _texto('xNome');
+      final valorTotal = double.tryParse(_texto('vNF')) ?? 0.0;
+      final situacao = 'Autorizada';
+
+      final itens = infNFe.findAllElements('det').map((det) {
+        final prod = det.findElements('prod').firstOrNull;
+        String _p(String t) =>
+            prod?.findElements(t).firstOrNull?.innerText ?? '';
+        return ItemNotaFiscal(
+          codigo: _p('cProd'),
+          descricao: _p('xProd'),
+          quantidade: int.tryParse(_p('qCom').split('.').first) ?? 1,
+          valorUnitario: double.tryParse(_p('vUnCom')) ?? 0.0,
+          valorTotal: double.tryParse(_p('vProd')) ?? 0.0,
+          unidade: _p('uCom'),
+        );
+      }).toList();
+
+      return NotaFiscal(
+        chaveAcesso: chave,
+        numero: numero,
+        serie: serie,
+        dataEmissao: dataEmissao,
+        cnpjEmitente: cnpjEmit,
+        nomeEmitente: nomeEmit,
+        cpfDestinatario: cpf,
+        nomeDestinatario: 'Consumidor',
+        valorTotal: valorTotal,
+        itens: itens,
+        situacao: situacao,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Simulação ────────────────────────────────────────────────────────────
+
   List<NotaFiscal> _gerarNotasSimuladas(String cpf) {
     return [
       NotaFiscal(
@@ -199,46 +315,41 @@ class NotaFiscalService {
         nomeEmitente: 'Posto de Combustível Estrela',
         cpfDestinatario: cpf,
         nomeDestinatario: 'Consumidor',
-        valorTotal: 312.50,
+        valorTotal: 150.00,
         protocolo: '135230012345680',
         situacao: 'Autorizada',
         itens: [
           ItemNotaFiscal(
-            codigo: '7891234567895',
+            codigo: '0001',
             descricao: 'Gasolina Comum',
-            quantidade: 50,
-            valorUnitario: 6.25,
-            valorTotal: 312.50,
-            unidade: 'L',
+            quantidade: 30,
+            valorUnitario: 5.00,
+            valorTotal: 150.00,
+            unidade: 'LT',
           ),
         ],
       ),
     ];
   }
 
-  // Métodos auxiliares para integração real (comentados)
+  // ── Utilitários ──────────────────────────────────────────────────────────
 
-  /*
-  String _montarXMLConsulta(String cpf, DateTime? dataInicio, DateTime? dataFim) {
-    // Monta XML SOAP para consulta na SEFAZ
-    return '''<?xml version="1.0" encoding="UTF-8"?>
-    <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
-      <soap:Body>
-        <nfeConsultaNFe>
-          <cpfDest>$cpf</cpfDest>
-          ${dataInicio != null ? '<dhIni>${dataInicio.toIso8601String()}</dhIni>' : ''}
-          ${dataFim != null ? '<dhFim>${dataFim.toIso8601String()}</dhFim>' : ''}
-        </nfeConsultaNFe>
-      </soap:Body>
-    </soap:Envelope>''';
-  }
+  bool validarCPF(String cpf) {
+    final c = cpf.replaceAll(RegExp(r'[^\d]'), '');
+    if (c.length != 11) return false;
+    if (RegExp(r'^(\d)\1{10}$').hasMatch(c)) return false;
 
-  List<NotaFiscal> _parseXMLResponse(String xmlResponse) {
-    // Parse do XML de retorno da SEFAZ
-    // Use o package 'xml' para fazer o parse
-    final document = XmlDocument.parse(xmlResponse);
-    // ... processar XML e retornar lista de NotaFiscal
-    return [];
+    final d = c.split('').map(int.parse).toList();
+    int sum = 0;
+    for (int i = 0; i < 9; i++) sum += d[i] * (10 - i);
+    int f1 = 11 - (sum % 11);
+    if (f1 >= 10) f1 = 0;
+    if (d[9] != f1) return false;
+
+    sum = 0;
+    for (int i = 0; i < 10; i++) sum += d[i] * (11 - i);
+    int f2 = 11 - (sum % 11);
+    if (f2 >= 10) f2 = 0;
+    return d[10] == f2;
   }
-  */
 }

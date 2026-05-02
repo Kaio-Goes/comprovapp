@@ -3,6 +3,7 @@ import '../../services/nota_fiscal_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/nota_fiscal_model.dart';
 import '../../models/usuario_model.dart';
+import '../../config/sefaz_config.dart';
 import 'package:intl/intl.dart';
 
 class MinhasNotasPage extends StatefulWidget {
@@ -13,7 +14,9 @@ class MinhasNotasPage extends StatefulWidget {
 }
 
 class _MinhasNotasPageState extends State<MinhasNotasPage> {
-  final _notaFiscalService = NotaFiscalService();
+  final _notaFiscalService = NotaFiscalService(
+    config: const SefazConfig(senhaCertificado: '', modoSimulacao: true),
+  );
   final _authService = AuthService();
 
   bool _isLoading = false;

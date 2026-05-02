@@ -1,7 +1,9 @@
 import 'package:comprovapp/pages/auth/login_page.dart';
+import 'package:comprovapp/pages/auth/welcome_page.dart';
 import 'package:comprovapp/pages/dashboard/dashboard_page.dart';
 import 'package:comprovapp/services/auth_service.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -15,7 +17,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'ComprovApp',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFEF7C7C)),
         useMaterial3: true,
       ),
       home: const AuthWrapper(),
@@ -35,6 +37,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   final _authService = AuthService();
   bool _isLoading = true;
   bool _isAuthenticated = false;
+  bool _primeiroAcesso = false;
 
   @override
   void initState() {
@@ -44,10 +47,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _checkAuthentication() async {
     final authenticated = await _authService.isAuthenticated();
-    setState(() {
-      _isAuthenticated = authenticated;
-      _isLoading = false;
-    });
+    if (!authenticated) {
+      // Verifica se é a primeira vez (nunca usou "lembrar-me")
+      final prefs = await SharedPreferences.getInstance();
+      final jaUsouApp = prefs.getBool('app_used') ?? false;
+      await prefs.setBool('app_used', true);
+      setState(() {
+        _isAuthenticated = authenticated;
+        _isLoading = false;
+        _primeiroAcesso = !jaUsouApp;
+      });
+    } else {
+      setState(() {
+        _isAuthenticated = true;
+        _isLoading = false;
+        _primeiroAcesso = false;
+      });
+    }
   }
 
   @override
@@ -60,6 +76,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    return _isAuthenticated ? const DashboardPage() : const LoginPage();
+    return _isAuthenticated
+        ? const DashboardPage()
+        : (_primeiroAcesso ? const WelcomePage() : const LoginPage());
   }
 }
