@@ -7,5 +7,24 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Notas fiscais — cada usuário acessa apenas as próprias
+    match /notas_fiscais/{uid}/notas/{chaveAcesso} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Empresas — qualquer usuário autenticado pode ler e escrever
+    // (dados públicos de CNPJ/nome, sem informações pessoais)
+    match /empresas/{cnpj} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Preços de produtos — base compartilhada entre todos os usuários
+    // Chave: "{cnpj}_{codigoProduto}"
+    match /precos_produtos/{id} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
   }
 }

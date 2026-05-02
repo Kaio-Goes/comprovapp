@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:xml/xml.dart';
+import '../models/empresa_model.dart';
 import '../models/nota_fiscal_model.dart';
+import '../models/preco_produto_model.dart';
 import '../models/usuario_model.dart';
 import '../config/sefaz_config.dart';
 
@@ -16,6 +19,8 @@ import '../config/sefaz_config.dart';
 ///   - NFC-e varia por estado (SVRS, SVAN, etc.)
 class NotaFiscalService {
   final SefazConfig config;
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   NotaFiscalService({required this.config});
 
@@ -43,10 +48,224 @@ class NotaFiscalService {
         xmlBody: xmlBody,
       );
 
-      return _parsearRespostaDistDFe(response, cpf);
+      final notas = _parsearRespostaDistDFe(response, cpf);
+      await salvarNotasFirestore(uid: usuario.uid, notas: notas);
+      return notas;
     } catch (e) {
       throw Exception('Erro ao buscar notas fiscais: $e');
     }
+  }
+
+  /// Salva as notas no Firestore e consolida dados por empresa (CNPJ).
+  ///
+  /// Estrutura:
+  ///   `notas_fiscais/{uid}/{chaveAcesso}` — nota completa
+  ///   `empresas/{cnpj}` — consolidado da empresa
+  Future<void> salvarNotasFirestore({
+    required String uid,
+    required List<NotaFiscal> notas,
+  }) async {
+    final batch = _firestore.batch();
+
+    for (final nota in notas) {
+      // Salva a nota vinculada ao usuário
+      final notaRef = _firestore
+          .collection('notas_fiscais')
+          .doc(uid)
+          .collection('notas')
+          .doc(nota.chaveAcesso);
+      batch.set(notaRef, nota.toJson(), SetOptions(merge: true));
+
+      // Atualiza consolidado da empresa
+      final cnpjKey = nota.cnpjEmitente.replaceAll(RegExp(r'[^\d]'), '');
+      final empresaRef = _firestore.collection('empresas').doc(cnpjKey);
+      batch.set(
+        empresaRef,
+        {
+          'cnpj': cnpjKey,
+          'nome': nota.nomeEmitente,
+          'ultimaCompra': Timestamp.fromDate(nota.dataEmissao),
+          'totalGasto': FieldValue.increment(nota.valorTotal),
+          'quantidadeNotas': FieldValue.increment(1),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+
+    // Rastreia histórico de preços por produto × loja
+    for (final nota in notas) {
+      await salvarPrecosProdutos(nota);
+    }
+  }
+
+  /// Salva / atualiza o histórico de preço de cada item da nota.
+  ///
+  /// Chave do documento: "{cnpj}_{codigoProduto}".
+  /// Idempotente: se a nota já foi processada (chaveAcesso no histórico), ignora.
+  Future<void> salvarPrecosProdutos(NotaFiscal nota) async {
+    if (nota.itens.isEmpty) return;
+    final cnpjLimpo = nota.cnpjEmitente.replaceAll(RegExp(r'[^\d]'), '');
+    final now = DateTime.now();
+
+    // Lê os documentos existentes em paralelo
+    final ids = nota.itens
+        .map((i) => '${cnpjLimpo}_${i.codigo}')
+        .toList();
+    final snaps = await Future.wait(
+      ids.map((id) => _firestore.collection('precos_produtos').doc(id).get()),
+    );
+
+    final batch = _firestore.batch();
+    bool temAlteracao = false;
+
+    for (int i = 0; i < nota.itens.length; i++) {
+      final item = nota.itens[i];
+      if (item.codigo.isEmpty || item.valorUnitario <= 0) continue;
+
+      final id = ids[i];
+      final ref = _firestore.collection('precos_produtos').doc(id);
+      final snap = snaps[i];
+
+      double? valorAnterior;
+      DateTime? dataAnterior;
+      List<Map<String, dynamic>> historico = [];
+
+      if (snap.exists) {
+        final data = snap.data()!;
+        final hist = (data['historico'] as List?) ?? [];
+        // Idempotência: pula se a nota já foi processada
+        final jaProcessado = hist.any(
+          (h) => (h as Map)['chaveNota'] == nota.chaveAcesso,
+        );
+        if (jaProcessado) continue;
+
+        historico = hist.cast<Map<String, dynamic>>().toList();
+
+        // Guarda o preço anterior
+        final prev = (data['valorAtual'] as num?)?.toDouble();
+        if (prev != null) {
+          valorAnterior = prev;
+          final prevData = data['dataAtualizado'];
+          dataAnterior =
+              prevData is Timestamp ? prevData.toDate() : null;
+        }
+      }
+
+      historico.add({
+        'valor': item.valorUnitario,
+        'data': Timestamp.fromDate(now),
+        'chaveNota': nota.chaveAcesso,
+      });
+      // Mantém no máximo 24 entradas
+      if (historico.length > 24) {
+        historico = historico.sublist(historico.length - 24);
+      }
+
+      batch.set(ref, {
+        'codigo': item.codigo,
+        'descricao': item.descricao,
+        'unidade': item.unidade ?? 'UN',
+        'cnpj': cnpjLimpo,
+        'nomeEmpresa': nota.nomeEmitente,
+        'valorAtual': item.valorUnitario,
+        'valorAnterior': valorAnterior,
+        'dataAtualizado': Timestamp.fromDate(now),
+        'dataAnterior':
+            dataAnterior != null ? Timestamp.fromDate(dataAnterior) : null,
+        'historico': historico,
+      });
+      temAlteracao = true;
+    }
+
+    if (temAlteracao) await batch.commit();
+  }
+
+  /// Retorna variações de preço para cada item de uma nota.
+  ///
+  /// Útil para exibir "ficou mais caro / mais barato" na tela de detalhes.
+  Future<Map<String, PrecoProduto>> buscarVariacoesParaNota(
+      NotaFiscal nota) async {
+    final cnpjLimpo = nota.cnpjEmitente.replaceAll(RegExp(r'[^\d]'), '');
+    final futures = nota.itens
+        .map((i) => _firestore
+            .collection('precos_produtos')
+            .doc('${cnpjLimpo}_${i.codigo}')
+            .get())
+        .toList();
+
+    final snaps = await Future.wait(futures);
+    final result = <String, PrecoProduto>{};
+    for (int i = 0; i < nota.itens.length; i++) {
+      final snap = snaps[i];
+      if (snap.exists) {
+        result[nota.itens[i].codigo] =
+            PrecoProduto.fromFirestore(snap.data()!, snap.id);
+      }
+    }
+    return result;
+  }
+
+  /// Busca preços do mesmo produto em diferentes lojas (base compartilhada).
+  Future<List<PrecoProduto>> buscarPrecosPorCodigo(String codigo) async {
+    if (codigo.isEmpty) return [];
+    try {
+      final snap = await _firestore
+          .collection('precos_produtos')
+          .where('codigo', isEqualTo: codigo)
+          .get();
+      final lista = snap.docs
+          .map((d) => PrecoProduto.fromFirestore(d.data(), d.id))
+          .toList()
+        ..sort((a, b) => a.valorAtual.compareTo(b.valorAtual));
+      return lista;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Busca notas já salvas no Firestore para um usuário.
+  Future<List<NotaFiscal>> buscarNotasSalvas(String uid) async {
+    final snap = await _firestore
+        .collection('notas_fiscais')
+        .doc(uid)
+        .collection('notas')
+        .orderBy('dataEmissao', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => NotaFiscal.fromJson(d.data()))
+        .toList();
+  }
+
+  /// Lista todas as empresas com compras do usuário (via notas salvas).
+  Future<List<Empresa>> listarEmpresasPorUsuario(String uid) async {
+    final notas = await buscarNotasSalvas(uid);
+    final Map<String, Empresa> mapa = {};
+    for (final nota in notas) {
+      final cnpj = nota.cnpjEmitente.replaceAll(RegExp(r'[^\d]'), '');
+      if (mapa.containsKey(cnpj)) {
+        final e = mapa[cnpj]!;
+        mapa[cnpj] = e.copyWith(
+          totalGasto: e.totalGasto + nota.valorTotal,
+          quantidadeNotas: e.quantidadeNotas + 1,
+          ultimaCompra: nota.dataEmissao.isAfter(e.ultimaCompra ?? DateTime(0))
+              ? nota.dataEmissao
+              : e.ultimaCompra,
+        );
+      } else {
+        mapa[cnpj] = Empresa(
+          cnpj: cnpj,
+          nome: nota.nomeEmitente,
+          totalGasto: nota.valorTotal,
+          quantidadeNotas: 1,
+          ultimaCompra: nota.dataEmissao,
+        );
+      }
+    }
+    return mapa.values.toList()
+      ..sort((a, b) => (b.ultimaCompra ?? DateTime(0))
+          .compareTo(a.ultimaCompra ?? DateTime(0)));
   }
 
   /// Consulta uma NF-e específica pela chave de acesso (44 dígitos).
@@ -188,29 +407,29 @@ class NotaFiscalService {
       final infNFe = doc.findAllElements('infNFe').firstOrNull;
       if (infNFe == null) return null;
 
-      String _texto(String tag) =>
+      String texto(String tag) =>
           infNFe.findElements(tag).firstOrNull?.innerText ?? '';
 
       final chave = infNFe.getAttribute('Id')?.replaceFirst('NFe', '') ?? '';
-      final numero = _texto('nNF');
-      final serie = _texto('serie');
-      final dataEmissao = DateTime.tryParse(_texto('dhEmi')) ?? DateTime.now();
-      final cnpjEmit = _texto('CNPJ');
-      final nomeEmit = _texto('xNome');
-      final valorTotal = double.tryParse(_texto('vNF')) ?? 0.0;
+      final numero = texto('nNF');
+      final serie = texto('serie');
+      final dataEmissao = DateTime.tryParse(texto('dhEmi')) ?? DateTime.now();
+      final cnpjEmit = texto('CNPJ');
+      final nomeEmit = texto('xNome');
+      final valorTotal = double.tryParse(texto('vNF')) ?? 0.0;
       final situacao = 'Autorizada';
 
       final itens = infNFe.findAllElements('det').map((det) {
         final prod = det.findElements('prod').firstOrNull;
-        String _p(String t) =>
+        String campo(String t) =>
             prod?.findElements(t).firstOrNull?.innerText ?? '';
         return ItemNotaFiscal(
-          codigo: _p('cProd'),
-          descricao: _p('xProd'),
-          quantidade: int.tryParse(_p('qCom').split('.').first) ?? 1,
-          valorUnitario: double.tryParse(_p('vUnCom')) ?? 0.0,
-          valorTotal: double.tryParse(_p('vProd')) ?? 0.0,
-          unidade: _p('uCom'),
+          codigo: campo('cProd'),
+          descricao: campo('xProd'),
+          quantidade: int.tryParse(campo('qCom').split('.').first) ?? 1,
+          valorUnitario: double.tryParse(campo('vUnCom')) ?? 0.0,
+          valorTotal: double.tryParse(campo('vProd')) ?? 0.0,
+          unidade: campo('uCom'),
         );
       }).toList();
 
@@ -341,13 +560,13 @@ class NotaFiscalService {
 
     final d = c.split('').map(int.parse).toList();
     int sum = 0;
-    for (int i = 0; i < 9; i++) sum += d[i] * (10 - i);
+    for (int i = 0; i < 9; i++) { sum += d[i] * (10 - i); }
     int f1 = 11 - (sum % 11);
     if (f1 >= 10) f1 = 0;
     if (d[9] != f1) return false;
 
     sum = 0;
-    for (int i = 0; i < 10; i++) sum += d[i] * (11 - i);
+    for (int i = 0; i < 10; i++) { sum += d[i] * (11 - i); }
     int f2 = 11 - (sum % 11);
     if (f2 >= 10) f2 = 0;
     return d[10] == f2;

@@ -46,3 +46,8 @@ app.*.map.json
 
 # Secrets and sensitive configuration
 lib/config/secrets.dart
+
+# Environment variables (certificate password, etc.)
+.env
+assets/cert/*.pfx
+assets/cert/*.p12

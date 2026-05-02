@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -88,6 +87,9 @@ class SefazConfig {
   }
 
   /// Cria instância lendo a senha do secure storage (produção).
+  ///
+  /// O certificado é carregado via SecureStorage (se previamente importado)
+  /// ou via asset `assets/cert/certificado.pfx` como fallback.
   static Future<SefazConfig> fromSecureStorage({
     int tipoAmbiente = 1,
     int codigoUF = 35,
@@ -99,7 +101,17 @@ class SefazConfig {
       tipoAmbiente: tipoAmbiente,
       codigoUF: codigoUF,
       senhaCertificado: senha,
+      // Fallback: carrega do asset se não houver bytes no SecureStorage
+      caminhoAsset: 'assets/cert/certificado.pfx',
       modoSimulacao: modoSimulacao,
     );
+  }
+
+  /// Salva apenas a senha do certificado no SecureStorage.
+  ///
+  /// Use quando o .pfx já está nos assets e só precisa guardar a senha.
+  static Future<void> salvarSenhaCertificado(String senha) async {
+    const storage = FlutterSecureStorage();
+    await storage.write(key: 'cert_a1_senha', value: senha);
   }
 }

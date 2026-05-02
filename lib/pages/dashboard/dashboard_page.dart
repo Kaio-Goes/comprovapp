@@ -7,6 +7,7 @@ import '../../components/stat_card.dart';
 import '../../components/purchase_card.dart';
 import '../../components/scan_button.dart';
 import '../notas/buscar_notas_page.dart';
+import '../notas/detalhe_nota_page.dart';
 import '../auth/login_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -35,17 +36,19 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() => _isLoading = true);
 
     try {
-      final purchases = await _purchaseService.getRecentPurchases();
-      final stats = await _purchaseService.getMonthlyStats();
+      final results = await Future.wait([
+        _purchaseService.getRecentPurchases(),
+        _purchaseService.getMonthlyStats(),
+      ]);
 
       setState(() {
-        _recentPurchases = purchases;
-        _stats = stats;
+        _recentPurchases = results[0] as List<Purchase>;
+        _stats = results[1] as Map<String, dynamic>;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      _showErrorDialog('Erro ao carregar dados');
+      _showErrorDialog('Erro ao carregar dados: $e');
     }
   }
 
@@ -190,9 +193,19 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _onPurchaseTap(Purchase purchase) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Detalhes de ${purchase.store}')),
-    );
+    final nota = _purchaseService.notaParaCompra(purchase.id);
+    if (nota != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DetalheNotaPage(nota: nota),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nota de ${purchase.store} não encontrada')),
+      );
+    }
   }
 
   void _onNotificationTap() {
@@ -309,7 +322,12 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const MinhasNotasPage(),
+                        ),
+                      ),
                       child: const Text('Ver todas'),
                     ),
                   ],
@@ -318,22 +336,46 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
 
             // Lista de Compras
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final purchase = _recentPurchases[index];
-                  return Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    child: PurchaseCard(
-                      purchase: purchase,
-                      onTap: () => _onPurchaseTap(purchase),
+            _recentPurchases.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.receipt_long_outlined,
+                              size: 64, color: Colors.grey[400]),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Nenhuma nota fiscal encontrada.',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Vá em "Compras" para buscar suas notas.',
+                            style: TextStyle(
+                                color: Colors.grey[500], fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                },
-                childCount: _recentPurchases.length,
-              ),
-            ),
+                  )
+                : SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final purchase = _recentPurchases[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 6),
+                          child: PurchaseCard(
+                            purchase: purchase,
+                            onTap: () => _onPurchaseTap(purchase),
+                          ),
+                        );
+                      },
+                      childCount: _recentPurchases.length,
+                    ),
+                  ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
           ],

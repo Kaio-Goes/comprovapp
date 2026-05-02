@@ -1,62 +1,91 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+
+import '../models/nota_fiscal_model.dart';
 import '../models/purchase_model.dart';
 
 class PurchaseService {
-  // Aqui você integrará com o backend
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Dados simulados - substituir pela chamada API
-  Future<List<Purchase>> getRecentPurchases() async {
-    // TODO: Implementar chamada ao backend
-    // final response = await http.get(Uri.parse('$baseUrl/purchases'));
+  // Cache das notas carregadas, indexadas pela chaveAcesso (= Purchase.id)
+  final Map<String, NotaFiscal> _notasCache = {};
 
-    await Future.delayed(const Duration(milliseconds: 500)); // Simula delay de rede
+  String? get _uid => _auth.currentUser?.uid;
 
-    return [
-      Purchase(
-        id: '1',
-        store: 'Supermercado Extra',
-        date: '28/12/2024',
-        total: 245.80,
-        items: 15,
-      ),
-      Purchase(
-        id: '2',
-        store: 'Walmart',
-        date: '25/12/2024',
-        total: 189.50,
-        items: 12,
-      ),
-      Purchase(
-        id: '3',
-        store: 'Carrefour',
-        date: '22/12/2024',
-        total: 312.40,
-        items: 20,
-      ),
-    ];
+  /// Retorna as notas do usuário salvas no Firestore, em ordem decrescente.
+  Future<List<NotaFiscal>> _buscarNotas({int limite = 50}) async {
+    final uid = _uid;
+    if (uid == null) return [];
+
+    final snap = await _db
+        .collection('notas_fiscais')
+        .doc(uid)
+        .collection('notas')
+        .orderBy('dataEmissao', descending: true)
+        .limit(limite)
+        .get();
+
+    return snap.docs.map((d) => NotaFiscal.fromJson(d.data())).toList();
   }
 
+  /// Retorna as compras recentes mapeadas a partir das notas fiscais do Firestore.
+  Future<List<Purchase>> getRecentPurchases() async {
+    final notas = await _buscarNotas(limite: 20);
+
+    _notasCache.clear();
+    for (final nota in notas) {
+      _notasCache[nota.chaveAcesso] = nota;
+    }
+
+    final fmt = DateFormat('dd/MM/yyyy', 'pt_BR');
+    return notas
+        .map((nota) => Purchase(
+              id: nota.chaveAcesso,
+              store: nota.nomeEmitente,
+              date: fmt.format(nota.dataEmissao),
+              total: nota.valorTotal,
+              items: nota.itens.length,
+            ))
+        .toList();
+  }
+
+  /// Calcula estatísticas do mês atual com base nas notas do Firestore.
   Future<Map<String, dynamic>> getMonthlyStats() async {
-    // TODO: Implementar chamada ao backend para estatísticas
-    await Future.delayed(const Duration(milliseconds: 300));
+    final notas = await _buscarNotas();
+    final now = DateTime.now();
+
+    final doMes = notas
+        .where((n) =>
+            n.dataEmissao.year == now.year &&
+            n.dataEmissao.month == now.month)
+        .toList();
+
+    if (doMes.isEmpty) {
+      return {
+        'totalSpent': 0.0,
+        'purchaseCount': 0,
+        'totalItems': 0,
+        'average': 0.0,
+      };
+    }
+
+    final totalSpent = doMes.fold(0.0, (s, n) => s + n.valorTotal);
+    final totalItems = doMes.fold(0, (s, n) => s + n.itens.length);
 
     return {
-      'totalSpent': 747.70,
-      'purchaseCount': 3,
-      'totalItems': 47,
-      'average': 249.23,
+      'totalSpent': totalSpent,
+      'purchaseCount': doMes.length,
+      'totalItems': totalItems,
+      'average': totalSpent / doMes.length,
     };
   }
 
-  Future<void> scanPurchase() async {
-    // TODO: Implementar lógica de scanner
-    // Aqui você integrará com o scanner de código de barras/QR code
-    // e enviará os dados para o backend
-    await Future.delayed(const Duration(seconds: 1));
-  }
+  /// Retorna a nota fiscal correspondente a uma compra pelo id (chaveAcesso).
+  NotaFiscal? notaParaCompra(String id) => _notasCache[id];
 
-  Future<Purchase?> getPurchaseById(String id) async {
-    // TODO: Implementar busca por ID no backend
-    await Future.delayed(const Duration(milliseconds: 300));
-    return null;
+  Future<void> scanPurchase() async {
+    // Integração com scanner/câmera a implementar
   }
 }
