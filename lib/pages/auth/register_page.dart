@@ -170,6 +170,7 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
           SafeArea(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Botão voltar
                 Padding(
@@ -183,30 +184,40 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ),
                 ),
+                // Título fixo — não sobe com o scroll
+                Padding(
+                  padding: const EdgeInsets.only(left: 28, right: 28, top: 20, bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Criar conta',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Container(
+                        width: 40,
+                        height: 3,
+                        margin: const EdgeInsets.only(top: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 45),
-                        const Text(
-                          'Criar conta',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Container(
-                          width: 40,
-                          height: 3,
-                          margin: const EdgeInsets.only(top: 6, bottom: 28),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
+                        const SizedBox(height: 20),
                         Form(
                           key: _formKey,
                           child: Column(
