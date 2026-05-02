@@ -1,1 +1,44 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"comprovaapp","appId":"1:944290577116:android:81cd0f20736200fc6a9219","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"comprovaapp","appId":"1:944290577116:ios:d8de7735e0689a2a6a9219","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"macos":{"default":{"projectId":"comprovaapp","appId":"1:944290577116:ios:d8de7735e0689a2a6a9219","uploadDebugSymbols":false,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"comprovaapp","configurations":{"android":"1:944290577116:android:81cd0f20736200fc6a9219","ios":"1:944290577116:ios:d8de7735e0689a2a6a9219","macos":"1:944290577116:ios:d8de7735e0689a2a6a9219","web":"1:944290577116:web:0c8e5daa3f7b2c046a9219","windows":"1:944290577116:web:c9bac2545e0ca9036a9219"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "comprovaapp",
+          "appId": "1:944290577116:android:81cd0f20736200fc6a9219",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "comprovaapp",
+          "appId": "1:944290577116:ios:d8de7735e0689a2a6a9219",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "comprovaapp",
+          "appId": "1:944290577116:ios:d8de7735e0689a2a6a9219",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "comprovaapp",
+          "configurations": {
+            "android": "1:944290577116:android:81cd0f20736200fc6a9219",
+            "ios": "1:944290577116:ios:d8de7735e0689a2a6a9219",
+            "macos": "1:944290577116:ios:d8de7735e0689a2a6a9219",
+            "web": "1:944290577116:web:0c8e5daa3f7b2c046a9219",
+            "windows": "1:944290577116:web:c9bac2545e0ca9036a9219"
+          }
+        }
+      }
+    }
+  }
+}

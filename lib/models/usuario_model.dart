@@ -4,6 +4,8 @@ class Usuario {
   final String nomeCompleto;
   final String email;
   final DateTime dataNascimento;
+  /// 0 = admin, 1 = cliente normal
+  final int role;
 
   Usuario({
     required this.uid,
@@ -11,6 +13,7 @@ class Usuario {
     required this.nomeCompleto,
     required this.email,
     required this.dataNascimento,
+    this.role = 1,
   });
 
   factory Usuario.fromFirestore(Map<String, dynamic> data, String uid) {
@@ -22,6 +25,7 @@ class Usuario {
       dataNascimento: data['dataNascimento'] != null
           ? DateTime.parse(data['dataNascimento'])
           : DateTime(2000),
+      role: data['role'] ?? 1,
     );
   }
 
@@ -31,8 +35,11 @@ class Usuario {
       'nomeCompleto': nomeCompleto,
       'email': email,
       'dataNascimento': dataNascimento.toIso8601String(),
+      'role': role,
     };
   }
+
+  bool get isAdmin => role == 0;
 
   String get cpfFormatado {
     final c = cpf.replaceAll(RegExp(r'[^\d]'), '');

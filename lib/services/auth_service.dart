@@ -32,6 +32,7 @@ class AuthService {
     required String nomeCompleto,
     required String cpf,
     required DateTime dataNascimento,
+    int role = 1,
   }) async {
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email.trim(),
@@ -47,6 +48,7 @@ class AuthService {
       nomeCompleto: nomeCompleto,
       email: email.trim(),
       dataNascimento: dataNascimento,
+      role: role,
     );
 
     await _firestore
